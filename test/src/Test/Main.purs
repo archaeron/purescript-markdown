@@ -33,24 +33,6 @@ testDocument sd = do
   log $ "Original: \n   " <> show sd <> "\nParsed:\n   " <> show parsed
   assert (parsed == sd <?> "Test failed")
 
-testValidations :: forall eff. Eff _ Unit
-testValidations = do
-  let validate = V.runV Left Right <<< validateSlamDown <<< parseMd
-  let document =
-        "welp = __:__ (not-a-time)\n\
-        \welp = #__ (not-a-number)\n\
-        \welp = __-__-__ __:__ (hi)\n\
-        \city = {BOS, SFO, NYC} (NOPE)"
-
-  let expectedErrors =
-        [ "Invalid text box: Expected Time"
-        , "Invalid text box: Expected Numeric"
-        , "Invalid text box: Expected DateTime"
-        , "Invalid dropdown"
-        ]
-
-  assert $ validate document == Left expectedErrors
-
 static :: Eff _ Unit
 static = do
   testDocument $ parseMd "Paragraph"
@@ -125,49 +107,13 @@ static = do
                          \\n\
                          \main = log \"Hello World\"\n\
                          \```"
-  testDocument $ parseMd "Some fenced code which can be evaluated:\n\
-                         \\n\
-                         \!~~~purescript\n\
-                         \import Debug.Log\n\
-                         \\n\
-                         \main = log \"Hello World\"\n\
-                         \~~~"
-  testDocument $ runIdentity
-               $ eval { block: \_ _ -> pure "Evaluated code block!"
-                      , code: \_ -> pure "Evaluated code value!"
-                      , text: \_ _ -> pure "Evaluated textbox value!"
-                      , value: \_ -> pure "Evaluated value!"
-                      , list: \_ -> pure $ singleton "Evaluated list!"
-                      }
-               $ parseMd "Some evaluated fenced code:\n\
-                         \\n\
-                         \!~~~purescript\n\
-                         \import Debug.Log\n\
-                         \\n\
-                         \main = log \"Hello World\"\n\
-                         \~~~"
-  testDocument $ parseMd "name = __ (Phil Freeman)"
-  testDocument $ parseMd "name = __ (!`name`)"
-  testDocument $ parseMd "sex* = (x) male () female () other"
-  testDocument $ parseMd "sex* = (!`def`) !`others`"
-  testDocument $ parseMd "city = {BOS, SFO, NYC} (NYC)"
-  testDocument $ parseMd "city = {!`...`} (!`...`)"
-  testDocument $ parseMd "phones = [] Android [x] iPhone [x] Blackberry"
-  testDocument $ parseMd "phones = [!`...`] !`...`"
-  testDocument $ parseMd "start = __ - __ - ____ (06-06-2015)"
-  testDocument $ parseMd "start = __ - __ - ____ (!`...`)"
-  testDocument $ parseMd "start = __ : __ (10:32 PM)"
-  testDocument $ parseMd "start = __ : __ (!`...`)"
-  testDocument $ parseMd "start = __ - __ - ____ __ : __ (06-06-2015 12:00 PM)"
-  testDocument $ parseMd "start = __ - __ - ____ __ : __ (!`...`)"
-  testDocument $ parseMd "[zip code]* = __ (12345)"
-  testDocument $ parseMd "defaultless = __"
-  testDocument $ parseMd "city = {BOS, SFO, NYC}"
-  testDocument $ parseMd "start = __ - __ - ____"
-  testDocument $ parseMd "start = __ : __"
-  testDocument $ parseMd "start = __ - __ - ____ __ : __"
-  testDocument $ parseMd "zip* = ________"
-  testDocument $ parseMd "[numeric field] = #______"
+  testDocument $ parseMd "Some annotations:\n\
+                        \\n\
+                        \#> tag\n\
+                        \# hello\n\
+                        \text\n\
+                        \#< tag\n\
+                        \~~~"
 
   log "All static tests passed!"
 
@@ -225,8 +171,7 @@ blocks = oneOf (smallArrayOf block0)
   block0 = oneOf (Paragraph <<< toList <$> inlines)
                  [ Header <$> chooseInt 1.0 6.0 <*> (singleton <$> simpleText)
                  , CodeBlock <$>
-                   (Fenced <$> (elements true (singleton false)) <*>
-                    alphaNum)
+                   (Fenced <$> alphaNum)
                    <*> (toList <$> smallArrayOf alphaNum)
                  , LinkReference <$> alphaNum <*> alphaNum
                  , pure Rule
@@ -245,7 +190,6 @@ blocks = oneOf (smallArrayOf block0)
 
 inlines :: Gen (Array Inline)
 inlines = oneOf inlines0 [ A.singleton <$> link
-                         , A.singleton <$> formField
                          ]
   where
   inlines0 :: Gen (Array Inline)
@@ -253,7 +197,7 @@ inlines = oneOf inlines0 [ A.singleton <$> link
                   [ three <$> simpleText
                           <*> (elements Space $ toList [SoftBreak, LineBreak])
                           <*> simpleText
-                  , A.singleton <$> (Code <$> (elements true (singleton false)) <*> alphaNum)
+                  , A.singleton <$> (Code <$> alphaNum)
                   ]
 
   link :: Gen Inline
@@ -262,15 +206,6 @@ inlines = oneOf inlines0 [ A.singleton <$> link
   linkTarget :: Gen LinkTarget
   linkTarget = oneOf (InlineLink <$> alphaNum)
                      [ ReferenceLink <<< Just <$> alphaNum ]
-
-  formField :: Gen Inline
-  formField = FormField <$> alphaNum
-                        <*> elements true (singleton false)
-                        <*> formElement
-
-  formElement :: Gen FormField
-  formElement = TextBox <$> (elements PlainText $ toList [Date, Time, DateTime])
-                        <*> (Just <<< Literal <$> alphaNum)
 
 simpleText :: Gen Inline
 simpleText = Str <$> alphaNum
@@ -285,4 +220,3 @@ main :: Eff _ Unit
 main = do
   static
   generated
-  testValidations

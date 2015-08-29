@@ -56,10 +56,9 @@ data Inline
   | LineBreak
   | Emph (List Inline)
   | Strong (List Inline)
-  | Code Boolean String
+  | Code String
   | Link (List Inline) LinkTarget
   | Image (List Inline) String
-  | FormField String Boolean FormField
 
 instance showInline :: Show Inline where
   show (Str s)           = "(Str " ++ show s ++ ")"
@@ -69,10 +68,9 @@ instance showInline :: Show Inline where
   show LineBreak         = "LineBreak"
   show (Emph is)         = "(Emph " ++ show is ++ ")"
   show (Strong is)       = "(Strong " ++ show is ++ ")"
-  show (Code e s)        = "(Code " ++ show e ++ " " ++ show s ++ ")"
+  show (Code s)          = "(Code " ++ show s ++ ")"
   show (Link is tgt)     = "(Link " ++ show is ++ " " ++ show tgt ++ ")"
   show (Image is uri)    = "(Image " ++ show is ++ " " ++ show uri ++ ")"
-  show (FormField l r f) = "(FormField " ++ show l ++ " " ++ show r ++ " " ++ show f ++ ")"
 
 data ListType = Bullet String | Ordered String
 
@@ -88,11 +86,11 @@ instance eqListType :: Eq ListType where
 
 data CodeBlockType
   = Indented
-  | Fenced Boolean String
+  | Fenced String
 
 instance showCodeAttr :: Show CodeBlockType where
   show Indented      = "Indented"
-  show (Fenced evaluated info) = "(Fenced " ++ show evaluated ++ " " ++ show info ++ ")"
+  show (Fenced info) = "(Fenced " ++ show info ++ ")"
 
 data LinkTarget
   = InlineLink String
@@ -212,13 +210,12 @@ eval fs = everywhereM b i
   where
 
   b :: Block -> m Block
-  b (CodeBlock (Fenced true info) code) =
-    CodeBlock (Fenced false info) <<< singleton <$> fs.block info code
+  b (CodeBlock (Fenced info) code) =
+    CodeBlock (Fenced info) <<< singleton <$> fs.block info code
   b other = pure $ other
 
   i :: Inline -> m Inline
-  i (Code true code) = Code false <$> fs.code code
-  i (FormField l r field) = FormField l r <$> f field
+  i (Code code) = Code <$> fs.code code
   i other = pure $ other
 
   f :: FormField -> m FormField

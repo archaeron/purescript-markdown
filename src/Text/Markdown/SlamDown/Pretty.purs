@@ -52,10 +52,7 @@ prettyPrintBlock (Lst lt bss) = concatMap listItem bss
   prettyPrintMarker (Bullet s) = s
   prettyPrintMarker (Ordered s) = "1" <> s
 prettyPrintBlock (CodeBlock Indented ss) = map (indent 4) ss
-prettyPrintBlock (CodeBlock (Fenced eval info) ss) = singleton (bang <> "```" <> info) <> ss <> singleton "```"
-  where
-  bang | eval = "!"
-       | otherwise = ""
+prettyPrintBlock (CodeBlock (Fenced info) ss) = singleton ("```" <> info) <> ss <> singleton "```"
 prettyPrintBlock (LinkReference l url) = singleton $ squares l <> ": " <> url
 prettyPrintBlock Rule = singleton "***"
 
@@ -70,41 +67,12 @@ prettyPrintInline SoftBreak = "\n"
 prettyPrintInline LineBreak = "  \n"
 prettyPrintInline (Emph is) = "*" <> prettyPrintInlines is <> "*"
 prettyPrintInline (Strong is) = "**" <> prettyPrintInlines is <> "**"
-prettyPrintInline (Code e s) = bang <> "`" <> s <> "`"
-  where bang = if e then "!" else ""
+prettyPrintInline (Code s) = "`" <> s <> "`"
 prettyPrintInline (Link is tgt) = "[" <> prettyPrintInlines is <> "]" <> printTarget tgt
   where
   printTarget (InlineLink url) = parens url
   printTarget (ReferenceLink tgt) = squares (fromMaybe "" tgt)
 prettyPrintInline (Image is url) = "![" <> prettyPrintInlines is <> "](" <> url <> ")"
-prettyPrintInline (FormField l r e) = esc l <> star <> " = " <> prettyPrintFormElement e
-  where
-  star = if r then "*" else" "
-  esc s = maybe s (const $ "[" <> s <> "]") $ indexOf " " s
-
-prettyPrintFormElement :: FormField -> String
-prettyPrintFormElement (TextBox ty value) =
-  intro ty <> maybe "" (\v -> " (" <> prettyPrintExpr id id v <> ")") value
-  where
-  intro PlainText = "______"
-  intro Numeric   = "#______"
-  intro Date      = "__ - __ - ____"
-  intro Time      = "__ : __"
-  intro DateTime  = "__ - __ - ____ __ : __"
-prettyPrintFormElement (RadioButtons def lbls) =
-  prettyPrintExpr parens ((<>) "(x) ") def <> " " <>
-  prettyPrintExpr id (joinWith " " <<< fromList <<< map ((<>) "() ")) lbls
-prettyPrintFormElement (CheckBoxes (Literal bs) (Literal ls)) =
-  joinWith " " $ fromList (zipWith checkBox bs ls)
-  where
-  checkBox b l = (if b then "[x] " else "[] ") <> l
-prettyPrintFormElement (CheckBoxes (Unevaluated bs) (Unevaluated ls)) =
-  "[!`" <> bs <> "`] !`" <> ls <> "`"
-prettyPrintFormElement (DropDown lbls sel) =
-  braces (prettyPrintExpr id (fromList >>> joinWith ", ") lbls) <>
-  maybe "" (\s -> parens (prettyPrintExpr id id s)) sel
-prettyPrintFormElement _ = "Unsupported form element"
-
 prettyPrintExpr :: forall a. (String -> String) -> (a -> String) -> Expr a -> String
 prettyPrintExpr _    f (Literal a) = f a
 prettyPrintExpr wrap _ (Unevaluated c) = wrap $ "!`" <> c <> "`"

@@ -29,7 +29,7 @@ data Container
   | CSetextHeader Int
   | CBlockquote (List Container)
   | CListItem ListType (List Container)
-  | CCodeBlockFenced Boolean String (List String)
+  | CCodeBlockFenced String (List String)
   | CCodeBlockIndented (List String)
   | CLinkReference Block
 
@@ -234,12 +234,10 @@ parseContainers acc (Cons s ss)
       in parseContainers (Cons (CCodeBlockIndented o.codeLines) acc) o.otherLines
   | isCodeFence (removeNonIndentingSpaces s) =
       let s1   = removeNonIndentingSpaces s
-          eval = isEvaluatedCode s1
-          s2   = if eval then S.drop 1 s1 else s1
-          info = codeFenceInfo s2
-          ch   = codeFenceChar s2
+          info = codeFenceInfo s1
+          ch   = codeFenceChar s1
           o    = splitCodeFence (countLeadingSpaces s) ch ss
-      in parseContainers (Cons (CCodeBlockFenced eval info o.codeLines) acc) o.otherLines
+      in parseContainers (Cons (CCodeBlockFenced info o.codeLines) acc) o.otherLines
   | isLinkReference (removeNonIndentingSpaces s) =
       let s1 = removeNonIndentingSpaces s
           b  = fromJust $ parseLinkReference s1
@@ -283,8 +281,8 @@ parseBlocks (Cons (CListItem lt cs) cs1) =
   in Cons (Lst lt (Cons bs bss)) $ parseBlocks sp.rest
 parseBlocks (Cons (CCodeBlockIndented ss) cs) =
   Cons (CodeBlock Indented ss) $ parseBlocks cs
-parseBlocks (Cons (CCodeBlockFenced eval info ss) cs) =
-  Cons (CodeBlock (Fenced eval info) ss) $ parseBlocks cs
+parseBlocks (Cons (CCodeBlockFenced info ss) cs) =
+  Cons (CodeBlock (Fenced info) ss) $ parseBlocks cs
 parseBlocks (Cons (CLinkReference b) cs) =
   Cons b $ parseBlocks cs
 parseBlocks (Cons _ cs) =

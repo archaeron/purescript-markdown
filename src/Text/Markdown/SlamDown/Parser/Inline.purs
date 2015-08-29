@@ -136,7 +136,6 @@ validateInline inl =
     Strong inls -> Strong <$> traverse validateInline inls
     Link inls targ -> Link <$> traverse validateInline inls <*> pure targ
     Image inls str -> Image <$> traverse validateInline inls <*> pure str
-    FormField str b ff -> FormField str b <$> validateFormField ff
     _ -> pure inl
 
 
@@ -158,8 +157,7 @@ inlines = many inline2 <* eof
             <|> try link
 
   inline2 :: Parser String Inline
-  inline2 = try formField
-            <|> try inline1
+  inline2 = try inline1
             <|> try image
             <|> other
 
@@ -201,10 +199,9 @@ inlines = many inline2 <* eof
 
   code :: Parser String Inline
   code = do
-    eval <- option false (string "!" *> pure true)
     ticks <- someOf (\x -> S.fromChar x == "`")
     contents <- (S.fromCharArray <<< fromList) <$> manyTill anyChar (string ticks)
-    return <<< Code eval <<< S.trim $ contents
+    return <<< Code <<< S.trim $ contents
 
 
   link :: Parser String Inline
@@ -247,84 +244,6 @@ inlines = many inline2 <* eof
     s <- (S.fromCharArray <<< fromList) <$> (noneOf (S.toCharArray ";") `many1Till` string ";")
     return $ Entity $ "&" <> s <> ";"
 
-
-  formField :: Parser String Inline
-  formField = FormField <$> label
-                        <*> (skipSpaces *> required)
-                        <*> (skipSpaces *> string "=" *> skipSpaces *> formElement)
-    where
-    label = someOf isAlphaNum <|> (S.fromCharArray <<< fromList <$> (string "[" *> manyTill anyChar (string "]")))
-    required = option false (string "*" *> pure true)
-
-  formElement :: Parser String FormField
-  formElement = try (textBox DateTime)
-            <|> try (textBox Date)
-            <|> try (textBox Time)
-            <|> try (textBox Numeric)
-            <|> try (textBox PlainText)
-            <|> try radioButtons
-            <|> try checkBoxes
-            <|> try dropDown
-    where
-
-    templateParserKit :: TextParserKit
-    templateParserKit =
-      { numericPrefix : hash
-      , plainText : und
-      , numeric : und
-      }
-
-    textBox :: TextBoxType -> Parser String FormField
-    textBox ty =
-      TextBox ty <$>
-        (parseTextOfType templateParserKit ty *>
-         skipSpaces *>
-         optionMaybe
-         (parens (expr id (manyOf (\x -> S.fromChar x /= ")")))))
-
-    und :: Parser String String
-    und = someOf (\x -> S.fromChar x == "_")
-
-    radioButtons :: Parser String FormField
-    radioButtons = do
-      let item = someOf \c -> not $ c `elem` ['(',')',' ','!','`']
-      def <- expr parens $ string "(x)" *> skipSpaces *> item
-      skipSpaces
-      ls <- expr id $ many (try (skipSpaces *> string "()" *> skipSpaces *> item))
-      return $ RadioButtons def ls
-
-    checkBoxes :: Parser String FormField
-    checkBoxes = literalCheckBoxes <|> evaluatedCheckBoxes
-      where
-      literalCheckBoxes = do
-        ls <- some $ try do
-          let item = someOf \c -> not $ c `elem` ['[',']',' ','!','`']
-          skipSpaces
-          b <- (string "[x]" *> pure true) <|> (string "[]" *> pure false)
-          skipSpaces
-          l <- item
-          return $ Tuple b l
-        return $ CheckBoxes (Literal (map fst ls)) (Literal (map snd ls))
-
-      evaluatedCheckBoxes = CheckBoxes <$> squares unevaluated <*> (skipSpaces *> unevaluated)
-
-    dropDown :: Parser String FormField
-    dropDown = do
-      let item = someOf \c -> not $ c `elem` ['{','}',',',' ','!','`','(',')']
-      ls <- braces $ expr id $ (try (skipSpaces *> item)) `sepBy` (skipSpaces *> string ",")
-      sel <- optionMaybe $ skipSpaces *> (parens $ expr id $ item)
-      return $ DropDown ls sel
-
-    expr :: forall a. (forall e. Parser String e -> Parser String e) ->
-            Parser String a -> Parser String (Expr a)
-    expr f p = try (f unevaluated) <|> Literal <$> p
-
-    unevaluated :: forall a. Parser String (Expr a)
-    unevaluated = do
-      string "!"
-      ticks <- someOf (\x -> S.fromChar x == "`")
-      Unevaluated <$> (S.fromCharArray <<< fromList) <$> manyTill anyChar (string ticks)
-
   other :: Parser String Inline
   other = do
     c <- S.fromChar <$> anyChar
@@ -333,4 +252,3 @@ inlines = many inline2 <* eof
             <|> (satisfy (\x -> S.fromChar x == "\n") *> pure LineBreak)
             <|> pure (Str "\\")
        else pure (Str c)
-
